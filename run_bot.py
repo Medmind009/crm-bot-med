@@ -1,8 +1,7 @@
+#!/usr/bin/env python3
 """
 Точка входа для запуска бота.
-python -m bot
 """
-import sys
 from bot import run_bot
 
 if __name__ == "__main__":
