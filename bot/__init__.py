@@ -1,6 +1,8 @@
 """
 Инициализация бота и регистрация обработчиков.
+Webhook версия для Render.
 """
+import os
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -19,8 +21,8 @@ from bot.handlers.search import search_leads, show_leads_for_selection, handle_l
 from bot.handlers.card import handle_card_callback
 
 
-# Токен бота
-TELEGRAM_TOKEN = "8712375566:AAGqUCjIf6MPy68Ayvrlx3LYZSdZxWLjgpE"
+# Токен бота (из env или по умолчанию)
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN") or "8712375566:AAGqUCjIf6MPy68Ayvrlx3LYZSdZxWLjgpE"
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -51,10 +53,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     flow = context.user_data.get("flow", "")
     
-    # Если это callback query (кнопки в карточке)
-    # обрабатывается отдельно
-    
-    # Проверяем какой flow активен
     if flow == "lead":
         await handle_lead_input(update, context)
     elif flow == "contact_select_lead":
@@ -70,14 +68,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif flow == "search":
         await search_leads(update, context)
     else:
-        # Это меню
         await handle_menu_choice(update, context)
 
 
 def run_bot():
     """Запуск бота."""
-    # Создаём приложение
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    from telegram.ext import ApplicationBuilder
+    
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     
     # Регистрируем обработчики команд
     app.add_handler(CommandHandler("start", start_command))
@@ -90,11 +88,24 @@ def run_bot():
     # Обработчик сообщений
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Бот запущен!")
+    # webhook URL ( Render дает URL )
+    webhook_url = os.environ.get("WEBHOOK_URL")
+    port = int(os.environ.get("PORT", 8080))
     
-    # Запускаем polling
-    app.run_polling(poll_interval=1.0)
-
-
-if __name__ == "__main__":
-    run_bot()
+    if webhook_url:
+        # Webhook режим для production
+        app.bot.delete_webhook()
+        app.bot.set_webhook(url=f"{webhook_url}/{TELEGRAM_TOKEN}")
+        print(f"🔗 Webhook: {webhook_url}")
+        print(f"🚀 Бот запущен на порту {port}")
+        
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            webhook_url=f"/{TELEGRAM_TOKEN}",
+            drop_pending_updates=True
+        )
+    else:
+        # Polling режим для локального запуска
+        print("🚀 Бот запущен (polling)")
+        app.run_polling(poll_interval=1.0, drop_pending_updates=True)
